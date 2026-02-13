@@ -33,15 +33,18 @@ export default function DisplayPage() {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isListening, setIsListening] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
   const [audioLevel, setAudioLevel] = useState(-160);
   const [spikeStrength, setSpikeStrength] = useState(0);
+  const [highFreqScore, setHighFreqScore] = useState(0);
   const [detectionThreshold, setDetectionThreshold] = useState(25);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const listeningIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastTriggerRef = useRef<number>(0);
   const audioHistoryRef = useRef<number[]>([]);
   const baselineRef = useRef<number>(-60); // Track ambient noise level
+  const prevLevelRef = useRef<number>(-160); // For frequency estimation
 
   useEffect(() => {
     requestPermissions();
@@ -128,7 +131,7 @@ export default function DisplayPage() {
       await recording.startAsync();
       recordingRef.current = recording;
 
-      // Monitor audio levels and detect bell-like spikes
+      // Monitor audio levels and detect bell-like spikes with frequency analysis
       listeningIntervalRef.current = setInterval(async () => {
         if (recordingRef.current) {
           const status = await recordingRef.current.getStatusAsync();
@@ -141,6 +144,27 @@ export default function DisplayPage() {
             if (audioHistoryRef.current.length > 20) {
               audioHistoryRef.current.shift();
             }
+
+            // Estimate frequency content by measuring oscillation rate
+            // High frequency sounds (bells) have rapid level changes
+            // Low frequency sounds (shouts) have slower level changes
+            let oscillationScore = 0;
+            if (audioHistoryRef.current.length >= 8) {
+              const recent = audioHistoryRef.current.slice(-8);
+              // Count direction changes (zero crossings of derivative)
+              let directionChanges = 0;
+              for (let i = 2; i < recent.length; i++) {
+                const prev_diff = recent[i-1] - recent[i-2];
+                const curr_diff = recent[i] - recent[i-1];
+                // If direction changed (one positive, one negative)
+                if (prev_diff * curr_diff < 0) {
+                  directionChanges++;
+                }
+              }
+              // More direction changes = higher frequency
+              oscillationScore = directionChanges * 10; // Scale it up
+            }
+            setHighFreqScore(oscillationScore);
 
             // Update baseline (ambient noise) using older history (if quiet)
             if (audioHistoryRef.current.length >= 15) {
@@ -173,11 +197,12 @@ export default function DisplayPage() {
               const isSharpSpike = spike > detectionThreshold; // Very rapid increase
               const isLoudEnough = level > -35; // Must be quite loud
               const isAboveBaseline = level > (baselineRef.current + 20); // Much louder than ambient
-              const cooldownPassed = (now - lastTriggerRef.current) > 500; // 2s cooldown
+              const cooldownPassed = (now - lastTriggerRef.current) > 500;
               const wasQuietBefore = avgQuietPeriod < -40; // Must come from relative quiet
+              const isHighFrequency = oscillationScore >= 30; // High oscillation = high frequency (bells)
 
               if (isSharpSpike && isLoudEnough && isAboveBaseline &&
-                  cooldownPassed && isStableBeforeSpike && wasQuietBefore) {
+                  cooldownPassed && isStableBeforeSpike && wasQuietBefore && isHighFrequency) {
                 lastTriggerRef.current = now;
                 advanceToNext();
                 // Clear history after trigger to reset
@@ -197,7 +222,9 @@ export default function DisplayPage() {
     setIsListening(false);
     audioHistoryRef.current = [];
     baselineRef.current = -60;
+    prevLevelRef.current = -160;
     setSpikeStrength(0);
+    setHighFreqScore(0);
     setAudioLevel(-160);
 
     if (listeningIntervalRef.current) {
@@ -245,6 +272,15 @@ export default function DisplayPage() {
           {isListening && <View style={styles.listeningIndicator} />}
         </TouchableOpacity>
 
+        {isListening && (
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => setShowDebug(!showDebug)}
+          >
+            <Text style={styles.debugIcon}>{showDebug ? '📊' : 'ℹ️'}</Text>
+          </TouchableOpacity>
+        )}
+
         {isSpiritIsland && currentPhase.backgroundIcon && (
           <Image
             source={currentPhase.backgroundIcon}
@@ -272,7 +308,7 @@ export default function DisplayPage() {
           )}
         </View>
 
-        {isListening && (
+        {isListening && showDebug && (
           <View style={styles.listeningContainer}>
             <Text style={styles.listeningText}>Listening for bell...</Text>
             <Text style={styles.audioLevelText}>
@@ -280,6 +316,9 @@ export default function DisplayPage() {
             </Text>
             <Text style={styles.audioLevelText}>
               Spike: {spikeStrength.toFixed(1)} dB (Need {detectionThreshold} dB)
+            </Text>
+            <Text style={styles.audioLevelText}>
+              Frequency: {highFreqScore.toFixed(0)} (Need 30+ for bell)
             </Text>
             <View style={styles.audioMeter}>
               <View
@@ -292,8 +331,19 @@ export default function DisplayPage() {
                 ]}
               />
             </View>
+            <View style={styles.audioMeter}>
+              <View
+                style={[
+                  styles.audioMeterBar,
+                  {
+                    width: `${Math.max(0, Math.min(100, (highFreqScore / 60) * 100))}%`,
+                    backgroundColor: highFreqScore >= 30 ? '#ff3333' : '#4CAF50'
+                  }
+                ]}
+              />
+            </View>
             <Text style={styles.helperText}>
-              Detecting sharp spikes from quiet moments
+              Detecting high-pitch sounds from quiet moments
             </Text>
             <View style={styles.thresholdControls}>
               <TouchableOpacity
@@ -402,6 +452,21 @@ const styles = StyleSheet.create({
   bellIcon: {
     fontSize: 32,
   },
+  debugButton: {
+    position: 'absolute',
+    top: 120,
+    left: 24,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  debugIcon: {
+    fontSize: 28,
+  },
   listeningIndicator: {
     position: 'absolute',
     top: 5,
@@ -413,7 +478,7 @@ const styles = StyleSheet.create({
   },
   listeningContainer: {
     position: 'absolute',
-    top: 120,
+    top: 180,
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     padding: 16,
