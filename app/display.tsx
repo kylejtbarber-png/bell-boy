@@ -18,11 +18,12 @@ export default function DisplayPage() {
   const [hasPermission, setHasPermission] = useState(false);
   const [audioLevel, setAudioLevel] = useState(-160);
   const [spikeStrength, setSpikeStrength] = useState(0);
-  const [detectionThreshold, setDetectionThreshold] = useState(15);
+  const [detectionThreshold, setDetectionThreshold] = useState(25);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const listeningIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastTriggerRef = useRef<number>(0);
   const audioHistoryRef = useRef<number[]>([]);
+  const baselineRef = useRef<number>(-60); // Track ambient noise level
 
   useEffect(() => {
     requestPermissions();
@@ -117,26 +118,48 @@ export default function DisplayPage() {
             const level = status.metering;
             setAudioLevel(level);
 
-            // Add to history (keep last 10 readings, ~500ms of data)
+            // Add to history (keep last 20 readings, ~1 second of data)
             audioHistoryRef.current.push(level);
-            if (audioHistoryRef.current.length > 10) {
+            if (audioHistoryRef.current.length > 20) {
               audioHistoryRef.current.shift();
             }
 
+            // Update baseline (ambient noise) using older history (if quiet)
+            if (audioHistoryRef.current.length >= 15) {
+              const oldSamples = audioHistoryRef.current.slice(0, 10);
+              const avgOld = oldSamples.reduce((a, b) => a + b, 0) / oldSamples.length;
+              // Slowly adapt baseline to ambient conditions
+              baselineRef.current = baselineRef.current * 0.95 + avgOld * 0.05;
+            }
+
             // Calculate spike strength (rate of change)
-            // Bells have a very sharp attack - sudden increase in volume
-            if (audioHistoryRef.current.length >= 3) {
-              const recentAvg = audioHistoryRef.current.slice(-3, -1).reduce((a, b) => a + b, 0) / 2;
-              const spike = level - recentAvg; // How much louder than recent average
+            // Bells have a very sharp attack - sudden increase from quiet baseline
+            if (audioHistoryRef.current.length >= 15) {
+              // Compare current level to baseline (not just recent samples)
+              const quietPeriod = audioHistoryRef.current.slice(-15, -3);
+              const avgQuietPeriod = quietPeriod.reduce((a, b) => a + b, 0) / quietPeriod.length;
+              const recentSamples = audioHistoryRef.current.slice(-3);
+              const avgRecent = recentSamples.reduce((a, b) => a + b, 0) / recentSamples.length;
+
+              const spike = avgRecent - avgQuietPeriod;
               setSpikeStrength(Math.max(0, spike));
 
-              // Detect bell: must have sharp spike AND be reasonably loud
-              const now = Date.now();
-              const isSharpSpike = spike > detectionThreshold; // Rapid increase
-              const isLoudEnough = level > -50; // Must be at least moderately loud
-              const cooldownPassed = (now - lastTriggerRef.current) > 1500; // 1.5s cooldown
+              // Check variance in quiet period - should be stable before a bell
+              const variance = quietPeriod.reduce((sum, val) => {
+                return sum + Math.pow(val - avgQuietPeriod, 2);
+              }, 0) / quietPeriod.length;
+              const isStableBeforeSpike = variance < 50; // Low variance = stable background
 
-              if (isSharpSpike && isLoudEnough && cooldownPassed) {
+              // Detect bell: must have ALL these characteristics
+              const now = Date.now();
+              const isSharpSpike = spike > detectionThreshold; // Very rapid increase
+              const isLoudEnough = level > -35; // Must be quite loud
+              const isAboveBaseline = level > (baselineRef.current + 20); // Much louder than ambient
+              const cooldownPassed = (now - lastTriggerRef.current) > 500; // 2s cooldown
+              const wasQuietBefore = avgQuietPeriod < -40; // Must come from relative quiet
+
+              if (isSharpSpike && isLoudEnough && isAboveBaseline &&
+                  cooldownPassed && isStableBeforeSpike && wasQuietBefore) {
                 lastTriggerRef.current = now;
                 advanceToNext();
                 // Clear history after trigger to reset
@@ -155,6 +178,7 @@ export default function DisplayPage() {
   const stopListening = async () => {
     setIsListening(false);
     audioHistoryRef.current = [];
+    baselineRef.current = -60;
     setSpikeStrength(0);
     setAudioLevel(-160);
 
@@ -226,18 +250,18 @@ export default function DisplayPage() {
               />
             </View>
             <Text style={styles.helperText}>
-              Bell detection looks for sudden volume spikes
+              Detecting sharp spikes from quiet moments
             </Text>
             <View style={styles.thresholdControls}>
               <TouchableOpacity
                 style={styles.thresholdButton}
-                onPress={() => setDetectionThreshold(t => Math.min(30, t + 2))}
+                onPress={() => setDetectionThreshold(t => Math.min(60, t + 3))}
               >
                 <Text style={styles.thresholdButtonText}>Less Sensitive</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.thresholdButton}
-                onPress={() => setDetectionThreshold(t => Math.max(5, t - 2))}
+                onPress={() => setDetectionThreshold(t => Math.max(10, t - 3))}
               >
                 <Text style={styles.thresholdButtonText}>More Sensitive</Text>
               </TouchableOpacity>
