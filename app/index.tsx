@@ -11,13 +11,16 @@ const COLORS = [
 export default function Page() {
   const router = useRouter();
   const [currentName, setCurrentName] = useState('');
+  const [selectedColor, setSelectedColor] = useState(COLORS[0]);
   const [names, setNames] = useState<Array<{ name: string; color: string }>>([]);
 
   const addName = () => {
     if (currentName.trim()) {
-      const color = COLORS[names.length % COLORS.length];
-      setNames([...names, { name: currentName.trim(), color }]);
+      setNames([...names, { name: currentName.trim(), color: selectedColor }]);
       setCurrentName('');
+      // Auto-select next color
+      const currentIndex = COLORS.indexOf(selectedColor);
+      setSelectedColor(COLORS[(currentIndex + 1) % COLORS.length]);
     }
   };
 
@@ -50,6 +53,27 @@ export default function Page() {
         <TouchableOpacity style={styles.addButton} onPress={addName}>
           <Text style={styles.addButtonText}>Add</Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.colorPickerContainer}>
+        <Text style={styles.colorLabel}>Choose color:</Text>
+        <View style={styles.colorGrid}>
+          {COLORS.map((color) => (
+            <TouchableOpacity
+              key={color}
+              style={[
+                styles.colorOption,
+                { backgroundColor: color },
+                selectedColor === color && styles.colorOptionSelected
+              ]}
+              onPress={() => setSelectedColor(color)}
+            >
+              {selectedColor === color && (
+                <Text style={styles.checkmark}>✓</Text>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       <FlatList
@@ -149,5 +173,39 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  colorPickerContainer: {
+    marginBottom: 16,
+  },
+  colorLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  colorOption: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  colorOptionSelected: {
+    borderColor: '#000',
+    borderWidth: 3,
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
 });
