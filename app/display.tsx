@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Pressable, Alert } from "react-native";
+import { StyleSheet, Text, View, TouchableOpacity, Pressable, Alert, Image } from "react-native";
 import { Audio } from 'expo-av';
 
 type NameData = {
@@ -8,10 +8,28 @@ type NameData = {
   color: string;
 };
 
+type SpiritIslandPhase = {
+  name: string;
+  color: string;
+  icon?: any;
+  backgroundIcon?: any;
+  backgroundOpacity?: number;
+};
+
+const SPIRIT_ISLAND_PHASES: SpiritIslandPhase[] = [
+  { name: 'Spirit Phase', color: '#4A90E2', backgroundIcon: require('../images/Sacredsiteicon.png'), backgroundOpacity: 0.3 },
+  { name: '', color: '#F5A623', icon: require('../images/Fasticon.png') },
+  { name: 'Event', color: '#D0021B', backgroundIcon: require('../images/Fearicon.png'), backgroundOpacity: 0.3 },
+  { name: 'Invader Phase', color: '#7B68EE', backgroundIcon: require('../images/Cityicon.png'), backgroundOpacity: 0.3 },
+  { name: '', color: '#50E3C2', icon: require('../images/Slowicon.png') },
+];
+
 export default function DisplayPage() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const namesData: NameData[] = JSON.parse(params.namesData as string);
+  const isSpiritIsland = params.mode === 'spiritIsland';
+  const namesData: NameData[] = isSpiritIsland ? [] : JSON.parse(params.namesData as string);
+  const phases = isSpiritIsland ? SPIRIT_ISLAND_PHASES : namesData;
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isListening, setIsListening] = useState(false);
@@ -46,7 +64,7 @@ export default function DisplayPage() {
 
   const advanceToNext = () => {
     setCurrentIndex((prev) => {
-      if (prev < namesData.length - 1) {
+      if (prev < phases.length - 1) {
         return prev + 1;
       } else {
         return 0;
@@ -210,11 +228,11 @@ export default function DisplayPage() {
     router.back();
   };
 
-  const currentName = namesData[currentIndex];
+  const currentPhase = phases[currentIndex];
 
   return (
     <Pressable style={styles.container} onPress={handleTap}>
-      <View style={[styles.fullScreen, { backgroundColor: currentName.color }]}>
+      <View style={[styles.fullScreen, { backgroundColor: currentPhase.color }]}>
         <TouchableOpacity style={styles.exitButton} onPress={handleExit}>
           <Text style={styles.exitText}>✕</Text>
         </TouchableOpacity>
@@ -227,7 +245,32 @@ export default function DisplayPage() {
           {isListening && <View style={styles.listeningIndicator} />}
         </TouchableOpacity>
 
-        <Text style={styles.nameText}>{currentName.name}</Text>
+        {isSpiritIsland && currentPhase.backgroundIcon && (
+          <Image
+            source={currentPhase.backgroundIcon}
+            style={[
+              styles.backgroundIcon,
+              { opacity: currentPhase.backgroundOpacity || 0.3 }
+            ]}
+            resizeMode="contain"
+          />
+        )}
+
+        <View style={styles.contentContainer}>
+          {currentPhase.name !== '' && (
+            <Text style={styles.nameText}>{currentPhase.name}</Text>
+          )}
+          {isSpiritIsland && currentPhase.icon && (
+            <Image
+              source={currentPhase.icon}
+              style={[
+                styles.phaseIcon,
+                currentPhase.name === '' && styles.phaseIconCentered
+              ]}
+              resizeMode="contain"
+            />
+          )}
+        </View>
 
         {isListening && (
           <View style={styles.listeningContainer}>
@@ -269,9 +312,11 @@ export default function DisplayPage() {
           </View>
         )}
 
-        <Text style={styles.counter}>
-          {currentIndex + 1} / {namesData.length}
-        </Text>
+        {!isSpiritIsland && (
+          <Text style={styles.counter}>
+            {currentIndex + 1} / {phases.length}
+          </Text>
+        )}
       </View>
     </Pressable>
   );
@@ -285,6 +330,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+  },
+  backgroundIcon: {
+    position: 'absolute',
+    width: 400,
+    height: 400,
+    zIndex: 0,
+  },
+  contentContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
   },
   nameText: {
     fontSize: 72,
@@ -294,6 +351,14 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 4,
+  },
+  phaseIcon: {
+    width: 200,
+    height: 200,
+    marginTop: 32,
+  },
+  phaseIconCentered: {
+    marginTop: 0,
   },
   counter: {
     position: 'absolute',

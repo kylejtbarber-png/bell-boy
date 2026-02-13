@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList } from "react-native";
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, Image } from "react-native";
 
 const COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
@@ -37,9 +37,27 @@ export default function Page() {
     }
   };
 
+  const startSpiritIsland = () => {
+    router.push({
+      pathname: '/display',
+      params: {
+        mode: 'spiritIsland'
+      }
+    });
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Add Names</Text>
+      <View style={styles.headerContainer}>
+        <Text style={styles.title}>Add Names</Text>
+        <TouchableOpacity style={styles.spiritIslandButton} onPress={startSpiritIsland}>
+          <Image
+            source={require('../images/Dahanicon.png')}
+            style={styles.spiritIslandIcon}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.inputContainer}>
         <TextInput
@@ -106,11 +124,30 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: '#fff',
   },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    position: 'relative',
+  },
   title: {
     fontSize: 32,
     fontWeight: "bold",
-    marginBottom: 24,
     textAlign: 'center',
+    flex: 1,
+  },
+  spiritIslandButton: {
+    position: 'absolute',
+    right: 0,
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  spiritIslandIcon: {
+    width: 50,
+    height: 50,
   },
   inputContainer: {
     flexDirection: 'row',
