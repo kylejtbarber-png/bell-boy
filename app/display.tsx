@@ -17,10 +17,12 @@ export default function DisplayPage() {
   const [isListening, setIsListening] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
   const [audioLevel, setAudioLevel] = useState(-160);
-  const [detectionThreshold, setDetectionThreshold] = useState(-40);
+  const [spikeStrength, setSpikeStrength] = useState(0);
+  const [detectionThreshold, setDetectionThreshold] = useState(15);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const listeningIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastTriggerRef = useRef<number>(0);
+  const audioHistoryRef = useRef<number[]>([]);
 
   useEffect(() => {
     requestPermissions();
@@ -107,7 +109,7 @@ export default function DisplayPage() {
       await recording.startAsync();
       recordingRef.current = recording;
 
-      // Monitor audio levels more frequently
+      // Monitor audio levels and detect bell-like spikes
       listeningIntervalRef.current = setInterval(async () => {
         if (recordingRef.current) {
           const status = await recordingRef.current.getStatusAsync();
@@ -115,11 +117,31 @@ export default function DisplayPage() {
             const level = status.metering;
             setAudioLevel(level);
 
-            // Detect loud sounds with cooldown to prevent multiple triggers
-            const now = Date.now();
-            if (level > detectionThreshold && (now - lastTriggerRef.current) > 1000) {
-              lastTriggerRef.current = now;
-              advanceToNext();
+            // Add to history (keep last 10 readings, ~500ms of data)
+            audioHistoryRef.current.push(level);
+            if (audioHistoryRef.current.length > 10) {
+              audioHistoryRef.current.shift();
+            }
+
+            // Calculate spike strength (rate of change)
+            // Bells have a very sharp attack - sudden increase in volume
+            if (audioHistoryRef.current.length >= 3) {
+              const recentAvg = audioHistoryRef.current.slice(-3, -1).reduce((a, b) => a + b, 0) / 2;
+              const spike = level - recentAvg; // How much louder than recent average
+              setSpikeStrength(Math.max(0, spike));
+
+              // Detect bell: must have sharp spike AND be reasonably loud
+              const now = Date.now();
+              const isSharpSpike = spike > detectionThreshold; // Rapid increase
+              const isLoudEnough = level > -50; // Must be at least moderately loud
+              const cooldownPassed = (now - lastTriggerRef.current) > 1500; // 1.5s cooldown
+
+              if (isSharpSpike && isLoudEnough && cooldownPassed) {
+                lastTriggerRef.current = now;
+                advanceToNext();
+                // Clear history after trigger to reset
+                audioHistoryRef.current = [];
+              }
             }
           }
         }
@@ -132,6 +154,9 @@ export default function DisplayPage() {
 
   const stopListening = async () => {
     setIsListening(false);
+    audioHistoryRef.current = [];
+    setSpikeStrength(0);
+    setAudioLevel(-160);
 
     if (listeningIntervalRef.current) {
       clearInterval(listeningIntervalRef.current);
@@ -184,29 +209,35 @@ export default function DisplayPage() {
           <View style={styles.listeningContainer}>
             <Text style={styles.listeningText}>Listening for bell...</Text>
             <Text style={styles.audioLevelText}>
-              Audio: {audioLevel.toFixed(0)} dB (Trigger at {detectionThreshold} dB)
+              Volume: {audioLevel.toFixed(0)} dB
+            </Text>
+            <Text style={styles.audioLevelText}>
+              Spike: {spikeStrength.toFixed(1)} dB (Need {detectionThreshold} dB)
             </Text>
             <View style={styles.audioMeter}>
               <View
                 style={[
                   styles.audioMeterBar,
                   {
-                    width: `${Math.max(0, Math.min(100, ((audioLevel + 160) / 160) * 100))}%`,
-                    backgroundColor: audioLevel > detectionThreshold ? '#ff3333' : '#4CAF50'
+                    width: `${Math.max(0, Math.min(100, (spikeStrength / 40) * 100))}%`,
+                    backgroundColor: spikeStrength > detectionThreshold ? '#ff3333' : '#4CAF50'
                   }
                 ]}
               />
             </View>
+            <Text style={styles.helperText}>
+              Bell detection looks for sudden volume spikes
+            </Text>
             <View style={styles.thresholdControls}>
               <TouchableOpacity
                 style={styles.thresholdButton}
-                onPress={() => setDetectionThreshold(t => Math.min(-10, t + 5))}
+                onPress={() => setDetectionThreshold(t => Math.min(30, t + 2))}
               >
                 <Text style={styles.thresholdButtonText}>Less Sensitive</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.thresholdButton}
-                onPress={() => setDetectionThreshold(t => Math.max(-80, t - 5))}
+                onPress={() => setDetectionThreshold(t => Math.max(5, t - 2))}
               >
                 <Text style={styles.thresholdButtonText}>More Sensitive</Text>
               </TouchableOpacity>
@@ -310,7 +341,15 @@ const styles = StyleSheet.create({
   audioLevelText: {
     fontSize: 14,
     color: '#fff',
+    marginBottom: 4,
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#fff',
+    opacity: 0.7,
+    fontStyle: 'italic',
     marginBottom: 8,
+    textAlign: 'center',
   },
   audioMeter: {
     width: 280,
