@@ -8,11 +8,16 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bellboy.app"
     },
     "android": {
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.bellboy.app",
+      "permissions": [
+        "RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static"
@@ -23,6 +28,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f9ac98d3-ddd5-4c30-a8b3-51381e6568e0"
+      }
     }
   }
 }

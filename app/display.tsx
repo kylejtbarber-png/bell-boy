@@ -33,25 +33,71 @@ export default function DisplayPage() {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isListening, setIsListening] = useState(false);
+  const [isPlayMode, setIsPlayMode] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
   const [audioLevel, setAudioLevel] = useState(-160);
   const [spikeStrength, setSpikeStrength] = useState(0);
   const [highFreqScore, setHighFreqScore] = useState(0);
   const [detectionThreshold, setDetectionThreshold] = useState(25);
+  const [frequencyThreshold, setFrequencyThreshold] = useState(30);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const listeningIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastTriggerRef = useRef<number>(0);
   const audioHistoryRef = useRef<number[]>([]);
   const baselineRef = useRef<number>(-60); // Track ambient noise level
   const prevLevelRef = useRef<number>(-160); // For frequency estimation
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   useEffect(() => {
     requestPermissions();
+    setupAudio();
     return () => {
       stopListening();
+      unloadSound();
     };
   }, []);
+
+  const setupAudio = async () => {
+    try {
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+    } catch (error) {
+      console.error('Error setting up audio:', error);
+    }
+  };
+
+  const unloadSound = async () => {
+    if (soundRef.current) {
+      try {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      } catch (error) {
+        console.error('Error unloading sound:', error);
+      }
+    }
+  };
+
+  const playBellSound = async () => {
+    try {
+      // Unload previous sound if any
+      await unloadSound();
+
+      // 1% chance to play bong, 99% chance to play default bell
+      const random = Math.random();
+      const soundFile = random < 0.01
+        ? require('../sounds/bong.mp3')
+        : require('../sounds/bell_default.mp3');
+
+      const { sound } = await Audio.Sound.createAsync(soundFile);
+      soundRef.current = sound;
+      await sound.playAsync();
+    } catch (error) {
+      console.error('Error playing bell sound:', error);
+    }
+  };
 
   const requestPermissions = async () => {
     try {
@@ -66,6 +112,11 @@ export default function DisplayPage() {
   };
 
   const advanceToNext = () => {
+    // Play bell sound if in play mode
+    if (isPlayMode) {
+      playBellSound();
+    }
+
     setCurrentIndex((prev) => {
       if (prev < phases.length - 1) {
         return prev + 1;
@@ -89,6 +140,7 @@ export default function DisplayPage() {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
       });
 
       setIsListening(true);
@@ -199,7 +251,7 @@ export default function DisplayPage() {
               const isAboveBaseline = level > (baselineRef.current + 20); // Much louder than ambient
               const cooldownPassed = (now - lastTriggerRef.current) > 500;
               const wasQuietBefore = avgQuietPeriod < -40; // Must come from relative quiet
-              const isHighFrequency = oscillationScore >= 30; // High oscillation = high frequency (bells)
+              const isHighFrequency = oscillationScore >= frequencyThreshold; // High oscillation = high frequency (bells)
 
               if (isSharpSpike && isLoudEnough && isAboveBaseline &&
                   cooldownPassed && isStableBeforeSpike && wasQuietBefore && isHighFrequency) {
@@ -226,6 +278,7 @@ export default function DisplayPage() {
     setSpikeStrength(0);
     setHighFreqScore(0);
     setAudioLevel(-160);
+    setShowDebug(false);
 
     if (listeningIntervalRef.current) {
       clearInterval(listeningIntervalRef.current);
@@ -240,6 +293,17 @@ export default function DisplayPage() {
         console.error('Error stopping recording:', error);
       }
     }
+
+    // Reset audio mode after stopping recording
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+    } catch (error) {
+      console.error('Error resetting audio mode:', error);
+    }
   };
 
   const toggleListening = () => {
@@ -252,6 +316,7 @@ export default function DisplayPage() {
 
   const handleExit = () => {
     stopListening();
+    unloadSound();
     router.back();
   };
 
@@ -270,6 +335,14 @@ export default function DisplayPage() {
         >
           <Text style={styles.bellIcon}>🔔</Text>
           {isListening && <View style={styles.listeningIndicator} />}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.playButton, isPlayMode && styles.playButtonActive]}
+          onPress={() => setIsPlayMode(!isPlayMode)}
+        >
+          <Text style={styles.playIcon}>🔊</Text>
+          {isPlayMode && <View style={styles.playIndicator} />}
         </TouchableOpacity>
 
         {isListening && (
@@ -318,7 +391,7 @@ export default function DisplayPage() {
               Spike: {spikeStrength.toFixed(1)} dB (Need {detectionThreshold} dB)
             </Text>
             <Text style={styles.audioLevelText}>
-              Frequency: {highFreqScore.toFixed(0)} (Need 30+ for bell)
+              Frequency: {highFreqScore.toFixed(0)} (Need {frequencyThreshold}+ for bell)
             </Text>
             <View style={styles.audioMeter}>
               <View
@@ -337,7 +410,7 @@ export default function DisplayPage() {
                   styles.audioMeterBar,
                   {
                     width: `${Math.max(0, Math.min(100, (highFreqScore / 60) * 100))}%`,
-                    backgroundColor: highFreqScore >= 30 ? '#ff3333' : '#4CAF50'
+                    backgroundColor: highFreqScore >= frequencyThreshold ? '#ff3333' : '#4CAF50'
                   }
                 ]}
               />
@@ -345,6 +418,7 @@ export default function DisplayPage() {
             <Text style={styles.helperText}>
               Detecting high-pitch sounds from quiet moments
             </Text>
+            <Text style={styles.controlLabel}>Volume Spike Sensitivity:</Text>
             <View style={styles.thresholdControls}>
               <TouchableOpacity
                 style={styles.thresholdButton}
@@ -357,6 +431,21 @@ export default function DisplayPage() {
                 onPress={() => setDetectionThreshold(t => Math.max(10, t - 3))}
               >
                 <Text style={styles.thresholdButtonText}>More Sensitive</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.controlLabel}>Frequency Threshold:</Text>
+            <View style={styles.thresholdControls}>
+              <TouchableOpacity
+                style={styles.thresholdButton}
+                onPress={() => setFrequencyThreshold(t => Math.min(60, t + 5))}
+              >
+                <Text style={styles.thresholdButtonText}>Higher Pitch</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.thresholdButton}
+                onPress={() => setFrequencyThreshold(t => Math.max(5, t - 5))}
+              >
+                <Text style={styles.thresholdButtonText}>Lower Pitch</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -452,9 +541,36 @@ const styles = StyleSheet.create({
   bellIcon: {
     fontSize: 32,
   },
-  debugButton: {
+  playButton: {
     position: 'absolute',
     top: 120,
+    left: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  playButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  playIcon: {
+    fontSize: 32,
+  },
+  playIndicator: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#33ff33',
+  },
+  debugButton: {
+    position: 'absolute',
+    top: 190,
     left: 24,
     width: 50,
     height: 50,
@@ -478,7 +594,7 @@ const styles = StyleSheet.create({
   },
   listeningContainer: {
     position: 'absolute',
-    top: 180,
+    top: 250,
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     padding: 16,
@@ -503,6 +619,14 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     fontStyle: 'italic',
     marginBottom: 8,
+    textAlign: 'center',
+  },
+  controlLabel: {
+    fontSize: 13,
+    color: '#fff',
+    fontWeight: '600',
+    marginTop: 8,
+    marginBottom: 4,
     textAlign: 'center',
   },
   audioMeter: {
