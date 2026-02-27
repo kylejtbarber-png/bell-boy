@@ -7,6 +7,7 @@
     "scheme": "bellboy",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./images/bell-logo.jpg",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bellboy.app"
@@ -17,7 +18,11 @@
       "package": "com.bellboy.app",
       "permissions": [
         "RECORD_AUDIO"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./images/bell-logo.jpg",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "web": {
       "output": "static"

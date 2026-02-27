@@ -600,6 +600,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     minWidth: 300,
+    zIndex: 20,
   },
   listeningText: {
     fontSize: 18,

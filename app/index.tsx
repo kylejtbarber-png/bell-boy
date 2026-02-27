@@ -3,9 +3,28 @@ import { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, Image } from "react-native";
 
 const COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
-  '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788',
-  '#FF8FA3', '#6C5CE7', '#00B894', '#FDCB6E', '#E17055'
+  '#FF0000', // Bright Red
+  '#8B0000', // Dark Red/Maroon
+  '#FF6347', // Tomato
+  '#FF8800', // Orange
+  '#FFD700', // Gold
+  '#FFFF00', // Yellow
+  '#7FFF00', // Chartreuse
+  '#228B22', // Forest Green
+  '#00FF7F', // Spring Green
+  '#008080', // Teal
+  '#00CED1', // Turquoise
+  '#00FFFF', // Cyan
+  '#0000FF', // Blue
+  '#000080', // Navy
+  '#4B0082', // Indigo
+  '#8B00FF', // Purple
+  '#FF00FF', // Magenta
+  '#FF1493', // Deep Pink
+  '#FF69B4', // Hot Pink
+  '#8B4513', // Saddle Brown
+  '#2F4F4F', // Dark Slate Gray
+  '#000000', // Black
 ];
 
 export default function Page() {
