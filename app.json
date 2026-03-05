@@ -3,7 +3,7 @@
     "name": "bell-boy",
     "slug": "bell-boy",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "scheme": "bellboy",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
